@@ -1,0 +1,500 @@
+// ============================================
+//   MARKETLENS — app.js
+// ============================================
+
+const API_KEY = 'BAVJUMEJW1Y4IRB8';
+const BASE    = 'https://www.alphavantage.co/query';
+
+const DEFAULT_SYMBOLS = ['GOOGL', 'AAPL', 'W', 'EURUSD'];
+
+const NAMES = {
+  GOOGL:  'Alphabet Inc.',
+  AAPL:   'Apple Inc.',
+  GLD:    'Gold ETF (SPDR)',
+  EURUSD: 'Euro / US Dollar',
+  TSLA:   'Tesla Inc.',
+  MSFT:   'Microsoft Corp.',
+  AMZN:   'Amazon.com Inc.',
+  NVDA:   'NVIDIA Corp.',
+  META:   'Meta Platforms',
+  NFLX:   'Netflix Inc.',
+};
+
+// ---- STATE ----
+let currentSymbol = 'GOOGL';
+let chartInstance = null;
+let lineSeries    = null;
+let candleSeries  = null;
+let chartType     = 'line';
+let priceCache    = {};
+let watchlist     = JSON.parse(localStorage.getItem('ml_watchlist') || '["TSLA","MSFT"]');
+let portfolio     = JSON.parse(localStorage.getItem('ml_portfolio') || '[]');
+let alerts        = JSON.parse(localStorage.getItem('ml_alerts')    || '[]');
+
+// ============================================
+//   INIT
+// ============================================
+async function init() {
+  initChart();
+  renderWatchlist();
+  renderPortfolio();
+  renderAlerts();
+  await Promise.all(DEFAULT_SYMBOLS.map(s => loadCard(s)));
+  await loadChart(currentSymbol);
+  await loadNews(currentSymbol);
+  buildTicker();
+  setInterval(refreshPrices, 60000);
+}
+
+// ============================================
+//   STOCK CARDS
+// ============================================
+async function loadCard(symbol) {
+  const el = document.getElementById(`card-${symbol}`);
+  if (!el) {
+    const grid = document.getElementById('cardsGrid');
+    const div = document.createElement('div');
+    div.className = 'stock-card skeleton';
+    div.id = `card-${symbol}`;
+    grid.appendChild(div);
+  }
+
+  const data = await fetchQuote(symbol);
+  if (!data) return;
+
+  priceCache[symbol] = data;
+  renderCard(symbol, data);
+}
+
+function renderCard(symbol, data) {
+  const el = document.getElementById(`card-${symbol}`);
+  if (!el) return;
+  el.classList.remove('skeleton');
+  el.onclick = () => selectSymbol(symbol);
+
+  const chgClass = data.change >= 0 ? 'up' : 'down';
+  const chgSign  = data.change >= 0 ? '+' : '';
+  const name     = NAMES[symbol] || symbol;
+
+  el.innerHTML = `
+    <div class="card-symbol">${symbol}</div>
+    <div class="card-name">${name}</div>
+    <div class="card-price">${formatPrice(data.price)}</div>
+    <div class="card-change ${chgClass}">
+      ${chgSign}${data.change.toFixed(2)} (${chgSign}${data.changePct.toFixed(2)}%)
+    </div>
+  `;
+
+  if (symbol === currentSymbol) el.classList.add('active');
+  else el.classList.remove('active');
+}
+
+// ============================================
+//   CHART
+// ============================================
+function initChart() {
+  chartInstance = LightweightCharts.createChart(document.getElementById('chart'), {
+    width:  document.getElementById('chart').offsetWidth,
+    height: 350,
+    layout: { background: { color: '#0f1117' }, textColor: '#8899aa' },
+    grid:   { vertLines: { color: '#1e2533' }, horzLines: { color: '#1e2533' } },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    rightPriceScale: { borderColor: '#1e2533' },
+    timeScale: { borderColor: '#1e2533', timeVisible: true },
+  });
+
+  lineSeries   = chartInstance.addLineSeries({ color: '#00d4aa', lineWidth: 2 });
+  candleSeries = chartInstance.addCandlestickSeries({
+    upColor: '#00d4aa', downColor: '#ff4d6a',
+    borderUpColor: '#00d4aa', borderDownColor: '#ff4d6a',
+    wickUpColor: '#00d4aa', wickDownColor: '#ff4d6a',
+  });
+
+  candleSeries.applyOptions({ visible: false });
+
+  window.addEventListener('resize', () => {
+    chartInstance.applyOptions({ width: document.getElementById('chart').offsetWidth });
+  });
+}
+
+async function loadChart(symbol) {
+  currentSymbol = symbol;
+  document.getElementById('chartTitle').textContent = `${symbol} — ${NAMES[symbol] || symbol}`;
+  document.getElementById('chartSubtitle').textContent = 'Loading chart data...';
+  document.getElementById('newsSymbol').textContent = `— ${symbol}`;
+
+  document.querySelectorAll('.stock-card').forEach(c => c.classList.remove('active'));
+  const activeCard = document.getElementById(`card-${symbol}`);
+  if (activeCard) activeCard.classList.add('active');
+
+  const isForex = symbol.length === 6 && !symbol.match(/^\d/);
+  let data;
+
+  if (isForex && symbol !== 'GLD') {
+    data = await fetchForexDaily(symbol);
+  } else {
+    data = await fetchDaily(symbol);
+  }
+
+  if (!data || data.length === 0) {
+    document.getElementById('chartSubtitle').textContent = 'No chart data available.';
+    return;
+  }
+
+  lineSeries.setData(data.map(d => ({ time: d.time, value: d.close })));
+  candleSeries.setData(data);
+  chartInstance.timeScale().fitContent();
+
+  const last = data[data.length - 1];
+  const prev = data[data.length - 2];
+  if (last && prev) {
+    const chg    = last.close - prev.close;
+    const chgPct = (chg / prev.close) * 100;
+    const sign   = chg >= 0 ? '+' : '';
+    const col    = chg >= 0 ? '#00d4aa' : '#ff4d6a';
+    document.getElementById('chartSubtitle').innerHTML =
+      `<span style="color:${col}">${sign}${chg.toFixed(2)} (${sign}${chgPct.toFixed(2)}%)</span> · Last: ${formatPrice(last.close)}`;
+  }
+}
+
+function setChartType(type, btn) {
+  chartType = type;
+  document.querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (type === 'line') {
+    lineSeries.applyOptions({ visible: true });
+    candleSeries.applyOptions({ visible: false });
+  } else {
+    lineSeries.applyOptions({ visible: false });
+    candleSeries.applyOptions({ visible: true });
+  }
+}
+
+// ============================================
+//   API CALLS
+// ============================================
+async function fetchQuote(symbol) {
+  try {
+    // Forex quote
+    if (symbol === 'EURUSD') {
+      const r = await fetch(`${BASE}?function=CURRENCY_EXCHANGE_RATE&from_currency=EUR&to_currency=USD&apikey=${API_KEY}`);
+      const d = await r.json();
+      const rate = d['Realtime Currency Exchange Rate'];
+      if (!rate) return null;
+      const price = parseFloat(rate['5. Exchange Rate']);
+      return { price, change: 0, changePct: 0 };
+    }
+    // Stock/ETF quote
+    const r = await fetch(`${BASE}?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${API_KEY}`);
+    const d = await r.json();
+    const q = d['Global Quote'];
+    if (!q || !q['05. price']) return null;
+    return {
+      price:     parseFloat(q['05. price']),
+      change:    parseFloat(q['09. change']),
+      changePct: parseFloat(q['10. change percent'].replace('%', '')),
+    };
+  } catch(e) {
+    console.error('fetchQuote error:', e);
+    return null;
+  }
+}
+
+async function fetchDaily(symbol) {
+  try {
+    const r = await fetch(`${BASE}?function=TIME_SERIES_DAILY&symbol=${symbol}&outputsize=compact&apikey=${API_KEY}`);
+    const d = await r.json();
+    const ts = d['Time Series (Daily)'];
+    if (!ts) return [];
+    return Object.entries(ts).map(([date, v]) => ({
+      time:  date,
+      open:  parseFloat(v['1. open']),
+      high:  parseFloat(v['2. high']),
+      low:   parseFloat(v['3. low']),
+      close: parseFloat(v['4. close']),
+    })).reverse();
+  } catch(e) {
+    console.error('fetchDaily error:', e);
+    return [];
+  }
+}
+
+async function fetchForexDaily(pair) {
+  try {
+    const from = pair.slice(0, 3);
+    const to   = pair.slice(3, 6);
+    const r = await fetch(`${BASE}?function=FX_DAILY&from_symbol=${from}&to_symbol=${to}&outputsize=compact&apikey=${API_KEY}`);
+    const d = await r.json();
+    const ts = d['Time Series FX (Daily)'];
+    if (!ts) return [];
+    return Object.entries(ts).map(([date, v]) => ({
+      time:  date,
+      open:  parseFloat(v['1. open']),
+      high:  parseFloat(v['2. high']),
+      low:   parseFloat(v['3. low']),
+      close: parseFloat(v['4. close']),
+    })).reverse();
+  } catch(e) {
+    console.error('fetchForexDaily error:', e);
+    return [];
+  }
+}
+
+async function fetchNews(symbol) {
+  try {
+    const r = await fetch(`${BASE}?function=NEWS_SENTIMENT&tickers=${symbol}&limit=10&apikey=${API_KEY}`);
+    const d = await r.json();
+    return d.feed || [];
+  } catch(e) {
+    console.error('fetchNews error:', e);
+    return [];
+  }
+}
+
+// ============================================
+//   NEWS
+// ============================================
+async function loadNews(symbol) {
+  const el = document.getElementById('newsList');
+  el.innerHTML = '<div class="news-loading">Fetching latest news...</div>';
+  const articles = await fetchNews(symbol);
+  if (!articles.length) {
+    el.innerHTML = '<div class="news-loading">No news found.</div>';
+    return;
+  }
+  el.innerHTML = articles.slice(0, 8).map(a => {
+    const sentiment = a.overall_sentiment_label || 'Neutral';
+    const sentClass = sentiment.includes('Bullish') ? 'Bullish' : sentiment.includes('Bearish') ? 'Bearish' : 'Neutral';
+    const sentLabel = sentClass;
+    const date = a.time_published ? a.time_published.slice(0, 8).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3') : '';
+    return `
+      <div class="news-item">
+        <span class="news-sentiment ${sentClass}">${sentLabel}</span>
+        <a href="${a.url}" target="_blank" rel="noopener">${a.title}</a>
+        <span class="news-meta">${a.source} · ${date}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+// ============================================
+//   WATCHLIST
+// ============================================
+function renderWatchlist() {
+  const ul = document.getElementById('watchlist');
+  ul.innerHTML = watchlist.map(sym => {
+    const d = priceCache[sym];
+    const price = d ? formatPrice(d.price) : '—';
+    const chg   = d ? `${d.change >= 0 ? '+' : ''}${d.changePct.toFixed(2)}%` : '';
+    const cls   = d ? (d.change >= 0 ? 'up' : 'down') : '';
+    return `
+      <li class="watch-item" onclick="selectSymbol('${sym}')">
+        <div class="watch-item-left">
+          <span class="watch-sym">${sym}</span>
+          <span class="watch-price">${price}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.5rem">
+          <span class="watch-chg ${cls}">${chg}</span>
+          <button class="remove-btn" onclick="removeFromWatchlist(event,'${sym}')">✕</button>
+        </div>
+      </li>
+    `;
+  }).join('');
+}
+
+async function addToWatchlist() {
+  const input = document.getElementById('watchlistInput');
+  const sym   = input.value.trim().toUpperCase();
+  if (!sym || watchlist.includes(sym)) { input.value = ''; return; }
+  watchlist.push(sym);
+  saveWatchlist();
+  input.value = '';
+  await loadCard(sym);
+  renderWatchlist();
+}
+
+function removeFromWatchlist(e, sym) {
+  e.stopPropagation();
+  watchlist = watchlist.filter(s => s !== sym);
+  saveWatchlist();
+  renderWatchlist();
+}
+
+function saveWatchlist() { localStorage.setItem('ml_watchlist', JSON.stringify(watchlist)); }
+
+// ============================================
+//   PORTFOLIO
+// ============================================
+function renderPortfolio() {
+  const ul = document.getElementById('portfolioList');
+  if (!portfolio.length) { ul.innerHTML = ''; document.getElementById('portfolioTotal').textContent = ''; return; }
+
+  let totalPnl = 0;
+  ul.innerHTML = portfolio.map((p, i) => {
+    const current = priceCache[p.symbol]?.price || p.buyPrice;
+    const pnl     = (current - p.buyPrice) * p.shares;
+    const pnlPct  = ((current - p.buyPrice) / p.buyPrice) * 100;
+    totalPnl += pnl;
+    const cls = pnl >= 0 ? 'up' : 'down';
+    const sign = pnl >= 0 ? '+' : '';
+    return `
+      <li class="port-item">
+        <div style="display:flex;justify-content:space-between;width:100%">
+          <span class="port-sym">${p.symbol}</span>
+          <button class="remove-btn" onclick="removeFromPortfolio(${i})">✕</button>
+        </div>
+        <span class="port-detail">${p.shares} shares @ ${formatPrice(p.buyPrice)}</span>
+        <span class="port-pnl ${cls}">${sign}${formatPrice(pnl)} (${sign}${pnlPct.toFixed(2)}%)</span>
+      </li>
+    `;
+  }).join('');
+
+  const totalCls  = totalPnl >= 0 ? '#00d4aa' : '#ff4d6a';
+  const totalSign = totalPnl >= 0 ? '+' : '';
+  document.getElementById('portfolioTotal').innerHTML =
+    `Total P&L: <span style="color:${totalCls}">${totalSign}${formatPrice(totalPnl)}</span>`;
+}
+
+async function addToPortfolio() {
+  const sym    = document.getElementById('portSymbol').value.trim().toUpperCase();
+  const shares = parseFloat(document.getElementById('portShares').value);
+  const price  = parseFloat(document.getElementById('portPrice').value);
+  if (!sym || !shares || !price) return;
+  portfolio.push({ symbol: sym, shares, buyPrice: price });
+  savePortfolio();
+  document.getElementById('portSymbol').value = '';
+  document.getElementById('portShares').value = '';
+  document.getElementById('portPrice').value  = '';
+  await loadCard(sym);
+  renderPortfolio();
+}
+
+function removeFromPortfolio(i) {
+  portfolio.splice(i, 1);
+  savePortfolio();
+  renderPortfolio();
+}
+
+function savePortfolio() { localStorage.setItem('ml_portfolio', JSON.stringify(portfolio)); }
+
+// ============================================
+//   PRICE ALERTS
+// ============================================
+function renderAlerts() {
+  const ul = document.getElementById('alertsList');
+  if (!alerts.length) { ul.innerHTML = ''; return; }
+  ul.innerHTML = alerts.map((a, i) => {
+    const triggered = checkAlert(a);
+    return `
+      <li class="alert-item watch-item">
+        <div class="watch-item-left">
+          <span class="alert-sym">${a.symbol}</span>
+          <span class="alert-cond">${a.condition} ${formatPrice(a.price)}</span>
+          ${triggered ? '<span class="alert-triggered">⚡ TRIGGERED</span>' : ''}
+        </div>
+        <button class="remove-btn" onclick="removeAlert(${i})">✕</button>
+      </li>
+    `;
+  }).join('');
+}
+
+function addAlert() {
+  const sym   = document.getElementById('alertSymbol').value.trim().toUpperCase();
+  const cond  = document.getElementById('alertCondition').value;
+  const price = parseFloat(document.getElementById('alertPrice').value);
+  if (!sym || !price) return;
+  alerts.push({ symbol: sym, condition: cond, price });
+  saveAlerts();
+  document.getElementById('alertSymbol').value = '';
+  document.getElementById('alertPrice').value  = '';
+  renderAlerts();
+}
+
+function removeAlert(i) {
+  alerts.splice(i, 1);
+  saveAlerts();
+  renderAlerts();
+}
+
+function checkAlert(a) {
+  const current = priceCache[a.symbol]?.price;
+  if (!current) return false;
+  if (a.condition === 'above' && current > a.price) return true;
+  if (a.condition === 'below' && current < a.price) return true;
+  return false;
+}
+
+function saveAlerts() { localStorage.setItem('ml_alerts', JSON.stringify(alerts)); }
+
+// ============================================
+//   SEARCH
+// ============================================
+async function searchStock() {
+  const sym = document.getElementById('searchInput').value.trim().toUpperCase();
+  if (!sym) return;
+  document.getElementById('searchInput').value = '';
+  await selectSymbol(sym);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.activeElement.id === 'searchInput') searchStock();
+  if (e.key === 'Enter' && document.activeElement.id === 'watchlistInput') addToWatchlist();
+});
+
+// ============================================
+//   SELECT SYMBOL
+// ============================================
+async function selectSymbol(symbol) {
+  currentSymbol = symbol;
+  await loadChart(symbol);
+  await loadNews(symbol);
+  if (!priceCache[symbol]) await loadCard(symbol);
+  renderWatchlist();
+  renderPortfolio();
+  renderAlerts();
+}
+
+// ============================================
+//   TICKER TAPE
+// ============================================
+async function buildTicker() {
+  const all = [...new Set([...DEFAULT_SYMBOLS, ...watchlist])];
+  const parts = await Promise.all(all.map(async sym => {
+    const d = priceCache[sym] || await fetchQuote(sym);
+    if (!d) return `${sym}: —`;
+    const sign = d.change >= 0 ? '▲' : '▼';
+    return `${sym}: ${formatPrice(d.price)} ${sign} ${Math.abs(d.changePct).toFixed(2)}%`;
+  }));
+  const text = parts.join('     ·     ');
+  document.getElementById('tickerInner').textContent = text + '     ·     ' + text;
+}
+
+// ============================================
+//   REFRESH
+// ============================================
+async function refreshPrices() {
+  const all = [...new Set([...DEFAULT_SYMBOLS, ...watchlist, ...portfolio.map(p => p.symbol)])];
+  await Promise.all(all.map(async sym => {
+    const d = await fetchQuote(sym);
+    if (d) { priceCache[sym] = d; renderCard(sym, d); }
+  }));
+  renderWatchlist();
+  renderPortfolio();
+  renderAlerts();
+  buildTicker();
+}
+
+// ============================================
+//   UTILS
+// ============================================
+function formatPrice(p) {
+  if (!p && p !== 0) return '—';
+  if (p >= 1000) return '$' + p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (p >= 1)    return '$' + p.toFixed(2);
+  return '$' + p.toFixed(4);
+}
+
+// ============================================
+//   START
+// ============================================
+init();

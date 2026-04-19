@@ -1,0 +1,1323 @@
+﻿// ============================================
+//   AUTH
+// ============================================
+console.log('[NexTrade] Loading main.js...');
+
+var USERS_KEY   = 'nt_users';
+var SESSION_KEY = 'nt_session';
+
+function getUsers()     { return JSON.parse(localStorage.getItem(USERS_KEY)   || '[]'); }
+function getSession()   { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); }
+function saveSession(s) { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
+
+function switchTab(tab) {
+  var tLogin  = document.getElementById('tabLogin');
+  var tSignup = document.getElementById('tabSignup');
+  var fLogin  = document.getElementById('loginForm');
+  var fSignup = document.getElementById('signupForm');
+  var fForgot = document.getElementById('forgotForm');
+  if (tLogin)  tLogin.classList.toggle('active',  tab === 'login');
+  if (tSignup) tSignup.classList.toggle('active', tab === 'signup');
+  if (fLogin)  fLogin.classList.toggle('hidden',  tab !== 'login');
+  if (fSignup) fSignup.classList.toggle('hidden', tab !== 'signup');
+  if (fForgot) fForgot.classList.toggle('hidden', tab !== 'forgot');
+  ['loginError','signupError','signupSuccess','forgotError','forgotSuccess'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.classList.remove('show');
+  });
+}
+
+function toggleEye(inputId, btn) {
+  var input = document.getElementById(inputId);
+  if (!input) return;
+  var isHidden = input.type === 'password';
+  input.type = isHidden ? 'text' : 'password';
+  var svg = btn.querySelector('svg');
+  if (!svg) return;
+  if (isHidden) {
+    svg.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>';
+  } else {
+    svg.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+  }
+}
+
+function checkStrength(password) {
+  var fill = document.getElementById('strengthFill');
+  var text = document.getElementById('strengthText');
+  if (!fill || !text) return;
+  var s = 0;
+  if (password.length >= 6)           s++;
+  if (password.length >= 10)          s++;
+  if (/[A-Z]/.test(password))         s++;
+  if (/[0-9]/.test(password))         s++;
+  if (/[^A-Za-z0-9]/.test(password)) s++;
+  var levels = [
+    { w: '0%',   bg: 'transparent', label: '' },
+    { w: '25%',  bg: '#ef5350',     label: 'חלשה' },
+    { w: '50%',  bg: '#f5a623',     label: 'בינונית' },
+    { w: '75%',  bg: '#26a69a',     label: 'חזקה' },
+    { w: '100%', bg: '#2962ff',     label: 'חזקה מאוד' }
+  ];
+  var lvl = levels[Math.min(s, 4)];
+  fill.style.width      = lvl.w;
+  fill.style.background = lvl.bg;
+  text.textContent      = lvl.label;
+}
+
+function handleLogin(e) {
+  e.preventDefault();
+  var email    = document.getElementById('loginEmail').value.trim().toLowerCase();
+  var password = document.getElementById('loginPassword').value;
+  var errEl    = document.getElementById('loginError');
+  errEl.classList.remove('show');
+  if (!email || !password) { errEl.textContent = 'נא למלא אימייל וסיסמה'; errEl.classList.add('show'); return; }
+  var users = getUsers();
+  var user  = users.find(function(u) { return u.email === email && u.password === password; });
+  if (!user) { errEl.textContent = 'אימייל או סיסמה שגויים'; errEl.classList.add('show'); document.getElementById('loginPassword').value = ''; return; }
+  loginSuccess(user);
+}
+
+function handleSignup(e) {
+  e.preventDefault();
+  var name     = document.getElementById('signupName').value.trim();
+  var email    = document.getElementById('signupEmail').value.trim().toLowerCase();
+  var password = document.getElementById('signupPassword').value;
+  var confirm  = document.getElementById('signupConfirm').value;
+  var errEl    = document.getElementById('signupError');
+  var sucEl    = document.getElementById('signupSuccess');
+  errEl.classList.remove('show'); sucEl.classList.remove('show');
+  if (!name || !email || !password || !confirm) { errEl.textContent = 'נא למלא את כל השדות'; errEl.classList.add('show'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errEl.textContent = 'כתובת אימייל לא תקינה'; errEl.classList.add('show'); return; }
+  if (password.length < 6) { errEl.textContent = 'הסיסמה חייבת להכיל לפחות 6 תווים'; errEl.classList.add('show'); return; }
+  if (password !== confirm) { errEl.textContent = 'הסיסמאות אינן תואמות'; errEl.classList.add('show'); return; }
+  var users = getUsers();
+  if (users.find(function(u) { return u.email === email; })) { errEl.textContent = 'אימייל זה כבר רשום במערכת'; errEl.classList.add('show'); return; }
+  users.push({ name: name, email: email, password: password });
+  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  sucEl.textContent = 'ההרשמה הצליחה! ברוך הבא ' + name + '  מועבר לכניסה...';
+  sucEl.classList.add('show');
+  setTimeout(function() {
+    document.getElementById('signupName').value = '';
+    document.getElementById('signupEmail').value = '';
+    document.getElementById('signupPassword').value = '';
+    document.getElementById('signupConfirm').value = '';
+    var fill = document.getElementById('strengthFill');
+    var txt  = document.getElementById('strengthText');
+    if (fill) fill.style.width = '0%';
+    if (txt)  txt.textContent  = '';
+    switchTab('login');
+    document.getElementById('loginEmail').value = email;
+  }, 2000);
+}
+
+function handleForgot(e) {
+  e.preventDefault();
+  var email = document.getElementById('forgotEmail').value.trim().toLowerCase();
+  var errEl = document.getElementById('forgotError');
+  var sucEl = document.getElementById('forgotSuccess');
+  errEl.classList.remove('show'); sucEl.classList.remove('show');
+  if (!email) { errEl.textContent = 'נא להכניס כתובת אימייל'; errEl.classList.add('show'); return; }
+  var users = getUsers();
+  var user  = users.find(function(u) { return u.email === email; });
+  if (!user) { errEl.textContent = 'אימייל זה אינו רשום במערכת'; errEl.classList.add('show'); return; }
+  sucEl.textContent = 'הסיסמה שלך: ' + user.password;
+  sucEl.classList.add('show');
+}
+
+function demoLogin() {
+  loginSuccess({ name: 'משתמש Demo', email: 'demo@nextrade.co.il' });
+}
+
+function loginSuccess(user) {
+  console.log('[NexTrade] loginSuccess called with:', user);
+  saveSession(user);
+  var authEl = document.getElementById('authOverlay');
+  var appEl = document.getElementById('appContainer');
+  console.log('[NexTrade] authOverlay:', !!authEl, 'appContainer:', !!appEl);
+  
+  if (authEl) authEl.style.display  = 'none';
+  if (appEl) appEl.style.display = 'block';
+  
+  var nameEl = document.getElementById('userNameDisplay');
+  var avatarEl = document.getElementById('userAvatar');
+  if (nameEl) nameEl.textContent = user.name;
+  if (avatarEl) avatarEl.textContent = user.name.charAt(0).toUpperCase();
+  
+  console.log('[NexTrade] About to call init() after 2 RAF...');
+  // defer init by 2 animation frames so the browser finishes layout before chart measures width
+  requestAnimationFrame(function() { requestAnimationFrame(init); });
+}
+
+function handleLogout() {
+  localStorage.removeItem(SESSION_KEY);
+  document.getElementById('appContainer').style.display = 'none';
+  document.getElementById('authOverlay').style.display  = 'flex';
+  document.getElementById('loginEmail').value    = '';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginError').classList.remove('show');
+  var dd = document.getElementById('userDropdown');
+  if (dd) dd.classList.remove('open');
+  switchTab('login');
+}
+
+(function checkAutoLogin() {
+  // ✓ תיקון: נוודא שיש session, או בואי נכנסה כ-demo
+  var session = getSession();
+  console.log('[NexTrade] Auto-login check: session exists?', !!session, 'session:', session);
+  
+  if (session && session.name) {
+    console.log('[NexTrade] Logging in existing session:', session.name);
+    loginSuccess(session);
+  } else {
+    // ✓ התחברות אוטומטית למשתמש demo בעת ביקור ראשון
+    // Auto login with demo account on first visit
+    console.log('[NexTrade] No session found. Auto-logging demo user...');
+    demoLogin();
+  }
+})();
+
+// ============================================
+//   APP CONFIG  —  Twelve Data (https://twelvedata.com — חינמי, ללא proxy)
+// ============================================
+var TD_KEY  = 'c73725be3168443e88ac257aa9baa547';
+var TD_BASE = 'https://api.twelvedata.com';
+
+// ✓ כל המניות של בורסת תל אביב (ת"א)
+var DEFAULT_SYMBOLS = ['TEVA.TA', 'ELBIT.TA', 'BEZQ.TA', 'POLI.TA', 'LUMI.TA', 'AZRG.TA'];
+
+var NAMES = {
+  // ✓ מניות בורסת תל אביב בלבד
+  'TEVA.TA':    'טבע תעשיות',
+  'ELBIT.TA':   'אלביט מערכות',
+  'BEZQ.TA':    'בזק',
+  'POLI.TA':    'בנק הפועלים',
+  'LUMI.TA':    'בנק לאומי',
+  'AZRG.TA':    'קבוצת אזריאלי',
+  'BOB.TA':     'בנק דיסקונט',
+  'TASE.TA':    'הבורסה (ת"א)',
+  'BANK.TA':    'בנק הפועלים',
+  'MGDL.TA':    'מגדל',
+  'HAP.TA':     'מכבי שירותי בריאות',
+  'NICE':       'נייס סיסטמס',
+  'CHKP':       'CheckPoint',
+  NVDA:   'NVIDIA Corp.',
+};
+
+// ============================================
+//   STATE
+// ============================================
+var currentSymbol   = 'TEVA.TA';
+var currentTF       = '1D';
+var chartInstance   = null;
+var volInstance     = null;
+var lineSeries      = null;
+var candleSeries    = null;
+var barSeries       = null;
+var volumeSeries    = null;
+var chartType       = 'candle';
+var volumeVisible   = true;
+var priceCache      = {};
+var candleCache     = {};   // candleCache[symbol][tf] = []
+var watchlist       = JSON.parse(localStorage.getItem('ml_watchlist') || '["TEVA.TA","ELBIT.TA","BEZQ.TA","POLI.TA","LUMI.TA","AZRG.TA"]');
+var portfolio       = JSON.parse(localStorage.getItem('ml_portfolio') || '[]');
+var alerts          = JSON.parse(localStorage.getItem('ml_alerts')    || '[]');
+
+// ============================================
+//   TASE MARKET HOURS (Israel time UTC+3)
+// ============================================
+function getTASEStatus() {
+  var now = new Date();
+  // Convert to Israel time (UTC+3)
+  var utc   = now.getTime() + now.getTimezoneOffset() * 60000;
+  var il    = new Date(utc + 3 * 3600000);
+  var day   = il.getDay();   // 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat
+  var h     = il.getHours();
+  var m     = il.getMinutes();
+  var hm    = h * 60 + m;
+
+  // Saturday = closed
+  if (day === 6) return { status: 'closed', label: ' שבת  סגור' };
+
+  // Friday = short session 09:00–13:25
+  if (day === 5) {
+    if (hm >= 9*60 && hm < 9*60+45)  return { status: 'pre',    label: ' טרום מסחר ו׳' };
+    if (hm >= 9*60+45 && hm < 13*60+25) return { status: 'open', label: ' פתוח (ו׳ קצר)' };
+    return { status: 'closed', label: ' סגור' };
+  }
+
+  // Sunday–Thursday = full session 09:00–17:25
+  if (day >= 0 && day <= 4) {
+    if (hm >= 9*60 && hm < 9*60+45)     return { status: 'pre',    label: ' טרום מסחר' };
+    if (hm >= 9*60+45 && hm < 17*60+25) return { status: 'open',   label: ' שוק פתוח' };
+    if (hm >= 17*60+25 && hm < 18*60)   return { status: 'pre',    label: ' אחרי מסחר' };
+    return { status: 'closed', label: ' סגור' };
+  }
+
+  return { status: 'closed', label: ' סגור' };
+}
+
+function updateTASEBadge() {
+  var badge = document.getElementById('taseBadge');
+  var dot   = document.getElementById('marketDot');
+  var txt   = document.getElementById('marketStatusText');
+  if (!badge) return;
+  var s = getTASEStatus();
+  
+  // ✓ תצוגה שיפור: הצגת שעות מסחר לפי מצב
+  var timeLabel = '';
+  var now = new Date();
+  var utc   = now.getTime() + now.getTimezoneOffset() * 60000;
+  var il    = new Date(utc + 3 * 3600000);
+  var h     = String(il.getHours()).padStart(2, '0');
+  var m     = String(il.getMinutes()).padStart(2, '0');
+  
+  if (s.status === 'open') {
+    timeLabel = ' 🔴 שוק פתוח (' + h + ':' + m + ')';
+  } else if (s.status === 'pre') {
+    timeLabel = ' 🟡 טרום/אחרי מסחר (' + h + ':' + m + ')';
+  } else {
+    timeLabel = ' ⚫ שוק סגור (' + h + ':' + m + ')';
+  }
+  
+  badge.textContent = timeLabel;
+  badge.className   = 'tase-badge ' + s.status;
+  if (dot) {
+    dot.className = 'status-dot' + (s.status === 'open' ? ' open' : '');
+  }
+  if (txt) txt.textContent = '';
+}
+
+// ============================================
+//   TIMEFRAME CONFIG
+// ============================================
+var TF_CONFIG = {
+  '1H': { label:'1H', tdInterval:'1h',     outputsize:120 },
+  '4H': { label:'4H', tdInterval:'4h',     outputsize:120 },
+  '8H': { label:'8H', tdInterval:'8h',     outputsize:120 },
+  '1D': { label:'1D', tdInterval:'1day',   outputsize:500 },
+  '1W': { label:'1W', tdInterval:'1week',  outputsize:260 },
+  '1M': { label:'1M', tdInterval:'1month', outputsize:120 },
+  '1Q': { label:'1Q', tdInterval:'1month', outputsize:120, aggregate:'quarter' },
+  '6M': { label:'6M', tdInterval:'1month', outputsize:120, aggregate:'halfyear' },
+};
+
+// ============================================
+//   DATA AGGREGATION
+// ============================================
+function aggregateBars(bars, period) {
+  if (!bars || !bars.length) return [];
+  if (period === 'week')     return aggregateByPeriod(bars, getWeekKey);
+  if (period === 'month')    return aggregateByPeriod(bars, getMonthKey);
+  if (period === 'quarter')  return aggregateByPeriod(bars, getQuarterKey);
+  if (period === 'halfyear') return aggregateByPeriod(bars, getHalfYearKey);
+  // numeric hour aggregation (4H, 8H)
+  if (typeof period === 'number') return aggregateByN(bars, period);
+  return bars;
+}
+
+function aggregateByN(bars, n) {
+  var result = [];
+  for (var i = 0; i < bars.length; i += n) {
+    var chunk = bars.slice(i, i + n);
+    result.push({
+      time:   chunk[0].time,
+      open:   chunk[0].open,
+      high:   Math.max.apply(null, chunk.map(function(b) { return b.high; })),
+      low:    Math.min.apply(null, chunk.map(function(b) { return b.low; })),
+      close:  chunk[chunk.length - 1].close,
+      volume: chunk.reduce(function(s, b) { return s + (b.volume || 0); }, 0),
+    });
+  }
+  return result;
+}
+
+function aggregateByPeriod(bars, keyFn) {
+  var map = {};
+  var order = [];
+  bars.forEach(function(b) {
+    var k = keyFn(b.time);
+    if (!map[k]) { map[k] = { time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume || 0 }; order.push(k); }
+    else {
+      map[k].high   = Math.max(map[k].high, b.high);
+      map[k].low    = Math.min(map[k].low,  b.low);
+      map[k].close  = b.close;
+      map[k].volume += (b.volume || 0);
+    }
+  });
+  return order.map(function(k) { return map[k]; });
+}
+
+function getWeekKey(dateStr) {
+  var d = new Date(dateStr);
+  var day = d.getDay();
+  var diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  var mon = new Date(d.setDate(diff));
+  return mon.toISOString().slice(0, 10);
+}
+function getMonthKey(dateStr)    { return dateStr.slice(0, 7) + '-01'; }
+function getQuarterKey(dateStr)  {
+  var mo = parseInt(dateStr.slice(5, 7), 10);
+  var yr = dateStr.slice(0, 4);
+  var qStart = [1, 1, 1, 4, 4, 4, 7, 7, 7, 10, 10, 10][mo - 1];
+  return yr + '-' + (qStart < 10 ? '0' : '') + qStart + '-01';
+}
+function getHalfYearKey(dateStr) {
+  var mo = parseInt(dateStr.slice(5, 7), 10);
+  var yr = dateStr.slice(0, 4);
+  return yr + '-' + (mo <= 6 ? '01' : '07') + '-01';
+}
+
+// ============================================
+//   TWELVE DATA FETCH  (CORS נתמך ישירות, ללא proxy)
+// ============================================
+async function tdFetch(endpoint, params) {
+  params.apikey = TD_KEY;
+  var qs  = Object.keys(params).map(function(k) {
+    return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+  }).join('&');
+  var url = TD_BASE + endpoint + '?' + qs;
+  console.log('[NexTrade] GET', endpoint, params.symbol || '', params.interval || '');
+  try {
+    var ctrl = new AbortController();
+    var tid  = setTimeout(function() { ctrl.abort(); }, 12000);
+    var r    = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(tid);
+    if (!r.ok) { console.error('Twelve Data HTTP', r.status); return null; }
+    var d = await r.json();
+    if (d.status === 'error' || d.code) {
+      console.error('Twelve Data error:', d.message || d.code);
+      return null;
+    }
+    return d;
+  } catch(e) {
+    console.error('Twelve Data fetch failed:', e.message || e);
+    return null;
+  }
+}
+
+async function fetchTDChart(symbol, tf) {
+  var cfg      = TF_CONFIG[tf];
+  var cacheKey = symbol + '_' + tf;
+  var ttl      = (tf === '1H' || tf === '4H' || tf === '8H') ? 300000 : 3600000;
+  if (candleCache[cacheKey] && candleCache[cacheKey].ts > Date.now() - ttl) {
+    return candleCache[cacheKey].data;
+  }
+  var d = await tdFetch('/time_series', {
+    symbol:     symbol,
+    interval:   cfg.tdInterval,
+    outputsize: cfg.outputsize,
+    order:      'ASC',
+  });
+  if (!d || !d.values || !d.values.length) return [];
+  var isIntraday = (tf === '1H' || tf === '4H' || tf === '8H');
+  var bars = d.values.map(function(v) {
+    var time;
+    if (isIntraday) {
+      // datetime like "2025-04-14 10:00:00" — convert to unix for lightweight-charts
+      time = Math.floor(new Date(v.datetime.replace(' ', 'T') + '+03:00').getTime() / 1000);
+    } else {
+      time = v.datetime;  // "YYYY-MM-DD" — used directly
+    }
+    return {
+      time:   time,
+      open:   parseFloat(v.open),
+      high:   parseFloat(v.high),
+      low:    parseFloat(v.low),
+      close:  parseFloat(v.close),
+      volume: parseFloat(v.volume) || 0,
+    };
+  });
+  candleCache[cacheKey] = { ts: Date.now(), data: bars };
+  return bars;
+}
+
+async function getBarsForTF(symbol, tf) {
+  var cfg = TF_CONFIG[tf];
+  var raw;
+
+  // Yahoo first for live-like updates (avoids TwelveData quota throttling)
+  raw = await fetchYahooChartDirect(symbol, tf);
+
+  if (!raw || !raw.length) {
+    // Fallback: TwelveData
+    raw = await fetchTDChart(symbol, tf);
+  }
+
+  if (cfg.aggregate) raw = aggregateBars(raw, cfg.aggregate);
+  return raw;
+}
+
+function extractJsonPayload(text) {
+  if (!text) return null;
+  var start = text.indexOf('{');
+  if (start === -1) return null;
+  try {
+    return JSON.parse(text.slice(start));
+  } catch (e) {
+    return null;
+  }
+}
+
+async function fetchYahooProxyJson(url) {
+  try {
+    var proxyUrl = 'https://r.jina.ai/http://' + url.replace(/^https?:\/\//, '');
+    var response = await fetch(proxyUrl);
+    if (!response.ok) return null;
+    var text = await response.text();
+    return extractJsonPayload(text);
+  } catch (e) {
+    return null;
+  }
+}
+
+// Yahoo Finance direct — עובד בלי proxy כשנפתחים מ-localhost
+async function fetchYahooChartDirect(symbol, tf) {
+  var cfg      = TF_CONFIG[tf];
+  var cacheKey = 'yf_' + symbol + '_' + tf;
+  var ttl      = (tf === '1H' || tf === '4H' || tf === '8H') ? 15000 : 60000;
+  if (candleCache[cacheKey] && candleCache[cacheKey].ts > Date.now() - ttl) {
+    return candleCache[cacheKey].data;
+  }
+  var yfInterval = { '1H':'1h','4H':'1h','8H':'1h','1D':'1d','1W':'1wk','1M':'1mo','1Q':'1mo','6M':'1mo' }[tf];
+  var yfRange    = { '1H':'5d','4H':'60d','8H':'60d','1D':'2y','1W':'5y','1M':'10y','1Q':'10y','6M':'10y' }[tf];
+  try {
+    var url = 'https://query1.finance.yahoo.com/v8/finance/chart/' +
+              encodeURIComponent(symbol) + '?interval=' + yfInterval + '&range=' + yfRange;
+    var d = await fetchYahooProxyJson(url);
+    if (!d.chart || !d.chart.result || !d.chart.result[0]) return [];
+    var result = d.chart.result[0];
+    var ts     = result.timestamp;
+    var quote  = result.indicators.quote[0];
+    if (!ts || !quote) return [];
+    var intraday = (tf === '1H' || tf === '4H' || tf === '8H');
+    var bars = [];
+    for (var j = 0; j < ts.length; j++) {
+      if (quote.open[j] == null) continue;
+      var time = intraday ? ts[j] : (function(t) {
+        var dt = new Date(t * 1000);
+        return dt.getUTCFullYear() + '-' +
+          String(dt.getUTCMonth()+1).padStart(2,'0') + '-' +
+          String(dt.getUTCDate()).padStart(2,'0');
+      })(ts[j]);
+      bars.push({ time: time, open: quote.open[j], high: quote.high[j],
+        low: quote.low[j], close: quote.close[j], volume: quote.volume[j] || 0 });
+    }
+    candleCache[cacheKey] = { ts: Date.now(), data: bars };
+    return bars;
+  } catch(e) { return []; }
+}
+
+async function resolveSymbolForData(symbol, tf) {
+  var normalized = (symbol || '').trim().toUpperCase();
+  if (!normalized) return null;
+
+  var candidates = [normalized];
+  if (normalized.indexOf('.') === -1) {
+    candidates.push(normalized + '.TA');
+  } else if (normalized.endsWith('.TA')) {
+    candidates.push(normalized.slice(0, -3));
+  }
+
+  for (var i = 0; i < candidates.length; i++) {
+    var candidate = candidates[i];
+    var bars = await getBarsForTF(candidate, tf || currentTF);
+    if (bars && bars.length) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+// ============================================
+//   CHART INIT
+// ============================================
+function initChart() {
+  var mainEl = document.getElementById('chart');
+  var volEl  = document.getElementById('volumeChart');
+  var chartHeight = Math.max(760, window.innerHeight - 170);
+
+  chartInstance = LightweightCharts.createChart(mainEl, {
+    autoSize: true,
+    height: chartHeight,
+    layout: { background: { color: '#0f1117' }, textColor: '#8899aa' },
+    grid:   { vertLines: { color: '#1e2533' }, horzLines: { color: '#1e2533' } },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    rightPriceScale: { borderColor: '#1e2533' },
+    timeScale: { borderColor: '#1e2533', timeVisible: true, secondsVisible: false },
+  });
+
+  lineSeries = chartInstance.addLineSeries({
+    color: '#2962ff', lineWidth: 2,
+    lastValueVisible: true, priceLineVisible: true,
+    crosshairMarkerVisible: true,
+  });
+
+  candleSeries = chartInstance.addCandlestickSeries({
+    upColor: '#26a69a',   downColor: '#ef5350',
+    borderUpColor: '#26a69a', borderDownColor: '#ef5350',
+    wickUpColor: '#26a69a',   wickDownColor: '#ef5350',
+  });
+  candleSeries.applyOptions({ visible: true });
+
+  barSeries = chartInstance.addBarSeries({
+    upColor: '#26a69a', downColor: '#ef5350',
+  });
+  barSeries.applyOptions({ visible: false });
+
+  // Volume chart (separate instance, auto width)
+  volInstance = LightweightCharts.createChart(volEl, {
+    autoSize: true,
+    height: 80,
+    layout: { background: { color: '#0f1117' }, textColor: '#6b7280' },
+    grid:   { vertLines: { color: 'transparent' }, horzLines: { color: '#1e2533' } },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    rightPriceScale: { borderColor: '#1e2533', scaleMargins: { top: 0.1, bottom: 0 } },
+    timeScale: { borderColor: '#1e2533', timeVisible: true, secondsVisible: false, visible: false },
+    handleScroll: false, handleScale: false,
+  });
+
+  volumeSeries = volInstance.addHistogramSeries({
+    priceFormat: { type: 'volume' },
+    priceScaleId: 'volume',
+  });
+  volInstance.priceScale('volume').applyOptions({ scaleMargins: { top: 0.1, bottom: 0 } });
+
+  // Sync crosshair between charts
+  chartInstance.subscribeCrosshairMove(function(param) {
+    syncVolumeCrosshair(param);
+    updateLegend(param);
+  });
+
+  window.addEventListener('resize', function() {
+    // autoSize handles resize automatically in v4
+  });
+}
+
+// ============================================
+//   LEGEND UPDATE on crosshair
+// ============================================
+function updateLegend(param) {
+  var legend = document.getElementById('chartLegend');
+  if (!legend) return;
+  if (!param || !param.time) {
+    legend.classList.remove('visible');
+    return;
+  }
+  legend.classList.add('visible');
+
+  var activeSeries = chartType === 'line' ? lineSeries : (chartType === 'candle' ? candleSeries : barSeries);
+  var barData = param.seriesData && param.seriesData.get(activeSeries);
+  var volData = param.seriesData && param.seriesData.get(volumeSeries);
+
+  if (chartType === 'line' && barData) {
+    document.getElementById('lgO').textContent = 'C ' + formatPrice(barData.value);
+    document.getElementById('lgH').textContent = '';
+    document.getElementById('lgL').textContent = '';
+    document.getElementById('lgC').textContent = '';
+  } else if (barData) {
+    document.getElementById('lgO').textContent = 'O ' + formatPrice(barData.open);
+    document.getElementById('lgH').textContent = 'H ' + formatPrice(barData.high);
+    document.getElementById('lgL').textContent = 'L ' + formatPrice(barData.low);
+    document.getElementById('lgC').textContent = 'C ' + formatPrice(barData.close);
+    var chgPct = barData.open ? ((barData.close - barData.open) / barData.open * 100) : 0;
+    var pctEl  = document.getElementById('lgPct');
+    pctEl.textContent = (chgPct >= 0 ? '+' : '') + chgPct.toFixed(2) + '%';
+    pctEl.className   = 'legend-pct ' + (chgPct >= 0 ? 'up' : 'down');
+  }
+
+  if (volData) {
+    document.getElementById('lgV').textContent = 'Vol ' + formatVolume(volData.value);
+    document.getElementById('volLegendText').textContent = formatVolume(volData.value);
+  }
+}
+
+function syncVolumeCrosshair(param) {
+  if (!param || !param.point) return;
+  // move volume crosshair to same logical time
+  // (LightweightCharts doesn't support direct crosshair sync in standalone, but scroll/scale are synced below)
+}
+
+function getSavedBars(symbol, tf) {
+  try {
+    var raw = localStorage.getItem('ml_lastbars_' + symbol + '_' + tf);
+    if (!raw) return [];
+    var parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveBars(symbol, tf, bars) {
+  try {
+    if (!bars || !bars.length) return;
+    var compact = bars.slice(Math.max(0, bars.length - 220));
+    localStorage.setItem('ml_lastbars_' + symbol + '_' + tf, JSON.stringify(compact));
+  } catch (e) {
+    // ignore storage failures
+  }
+}
+
+function buildDemoBars(tf, basePrice) {
+  var countMap = { '1H': 120, '4H': 120, '8H': 120, '1D': 160, '1W': 160, '1M': 120, '1Q': 80, '6M': 80 };
+  var count = countMap[tf] || 120;
+  var intraday = (tf === '1H' || tf === '4H' || tf === '8H');
+  var ts = Math.floor(Date.now() / 1000);
+  var step = intraday ? 3600 : 86400;
+  var price = isNaN(basePrice) ? 100 : basePrice;
+  var out = [];
+  for (var i = count - 1; i >= 0; i--) {
+    var wave = Math.sin((count - i) / 8) * 0.9;
+    var drift = (Math.random() - 0.48) * 0.7;
+    var open = price;
+    var close = Math.max(0.1, open + wave + drift);
+    var high = Math.max(open, close) + Math.random() * 0.9;
+    var low = Math.min(open, close) - Math.random() * 0.9;
+    var volume = Math.floor(150000 + Math.random() * 650000);
+    var t = ts - i * step;
+    var time = intraday ? t : (function(sec) {
+      var d = new Date(sec * 1000);
+      return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
+    })(t);
+    out.push({ time: time, open: open, high: high, low: low, close: close, volume: volume });
+    price = close;
+  }
+  return out;
+}
+
+// ============================================
+//   LOAD CHART (with TF)
+// ============================================
+async function loadChart(symbol, tf) {
+  tf = tf || currentTF;
+  var targetSymbol = (symbol || '').trim().toUpperCase();
+  if (!targetSymbol) return;
+  if (targetSymbol.indexOf('.') === -1) {
+    var resolved = await resolveSymbolForData(targetSymbol, tf);
+    targetSymbol = resolved || targetSymbol;
+  }
+
+  currentSymbol = targetSymbol;
+  currentTF     = tf;
+
+  document.getElementById('chartTitle').textContent    = targetSymbol + '  ' + (NAMES[targetSymbol] || (priceCache[targetSymbol] && priceCache[targetSymbol].name) || targetSymbol);
+  document.getElementById('chartSubtitle').innerHTML =
+    '<span id="loadDots" style="color:var(--accent)">&#9679;&#9679;&#9679; מחפש נתונים מ-Yahoo Finance...</span>';
+  document.getElementById('newsSymbol').textContent    = ' ' + targetSymbol;
+  // spinner pulse on the 3 dots
+  var dotEl = document.getElementById('loadDots');
+  if (dotEl) {
+    var dotCount = 0;
+    var dotTimer = setInterval(function() {
+      if (!document.getElementById('loadDots')) { clearInterval(dotTimer); return; }
+      dotCount = (dotCount + 1) % 4;
+      document.getElementById('loadDots').textContent = '⬤'.repeat(dotCount + 1) + ' מחפש נתונים...';
+    }, 400);
+  }
+
+  document.querySelectorAll('.stock-card').forEach(function(c) { c.classList.remove('active'); });
+  var activeCard = document.getElementById('card-' + targetSymbol);
+  if (activeCard) activeCard.classList.add('active');
+
+  var bars = await getBarsForTF(targetSymbol, tf);
+  console.log('[NexTrade] bars received:', bars ? bars.length : 0, 'symbol:', targetSymbol, 'tf:', tf);
+  if (bars && bars.length) console.log('[NexTrade] first bar:', JSON.stringify(bars[0]));
+
+  var usingFallback = false;
+  if (!bars || !bars.length) {
+    bars = getSavedBars(targetSymbol, tf);
+    if (bars && bars.length) {
+      usingFallback = true;
+    }
+  }
+  if (!bars || !bars.length) {
+    var base = priceCache[targetSymbol] && priceCache[targetSymbol].price;
+    bars = buildDemoBars(tf, base);
+    usingFallback = true;
+  }
+
+  // Deduplicate and sort bars by time (prevents LightweightCharts errors)
+  var seen = {};
+  bars = bars.filter(function(b) {
+    var k = String(b.time);
+    if (seen[k]) return false;
+    seen[k] = true;
+    return true;
+  });
+  bars.sort(function(a, b) {
+    var ta = typeof a.time === 'string' ? a.time : a.time;
+    var tb = typeof b.time === 'string' ? b.time : b.time;
+    return ta < tb ? -1 : ta > tb ? 1 : 0;
+  });
+
+  saveBars(targetSymbol, tf, bars);
+
+  // Build volume data with colors
+  var volData = bars.map(function(b) {
+    var isUp = b.close >= b.open;
+    return {
+      time:  b.time,
+      value: b.volume || 0,
+      color: isUp ? 'rgba(38,166,154,0.5)' : 'rgba(239,83,80,0.5)',
+    };
+  });
+
+  // Set all series data
+  var lineData = bars.map(function(b) { return { time: b.time, value: b.close }; });
+  lineSeries.setData(lineData);
+  candleSeries.setData(bars);
+  barSeries.setData(bars);
+  volumeSeries.setData(volData);
+
+  // Sync timescale
+  chartInstance.timeScale().fitContent();
+  volInstance.timeScale().setVisibleRange(chartInstance.timeScale().getVisibleRange() || { from: bars[0].time, to: bars[bars.length - 1].time });
+
+  // Subscribe to main chart scroll/zoom to sync volume
+  chartInstance.timeScale().subscribeVisibleTimeRangeChange(function(range) {
+    if (range) {
+      try { volInstance.timeScale().setVisibleRange(range); } catch(e) {}
+    }
+  });
+
+  // Subtitle
+  var last = bars[bars.length - 1];
+  var prev = bars[bars.length - 2];
+  if (last && prev) {
+    var chg    = last.close - prev.close;
+    var chgPct = (chg / prev.close) * 100;
+    var sign   = chg >= 0 ? '+' : '';
+    var col    = chg >= 0 ? '#26a69a' : '#ef5350';
+    document.getElementById('chartSubtitle').innerHTML =
+      '<span style="color:' + col + '">' + sign + chg.toFixed(2) + ' (' + sign + chgPct.toFixed(2) + '%)</span>  מחיר: ' + formatPrice(last.close) +
+      '  <span style="color:var(--text-muted);font-size:.72rem">Vol: ' + formatVolume(last.volume) + '</span>' +
+      (usingFallback ? '  <span style="color:var(--gold);font-size:.72rem">(תצוגת גיבוי זמנית - מגבלת API)</span>' : '');
+  }
+}
+
+// ============================================
+//   TIMEFRAME SWITCHER
+// ============================================
+function setTimeframe(tf, btn) {
+  currentTF = tf;
+  document.querySelectorAll('.tf-btn').forEach(function(b) { b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  else {
+    var b2 = document.getElementById('tf-' + tf);
+    if (b2) b2.classList.add('active');
+  }
+  loadChart(currentSymbol, tf);
+}
+
+// ============================================
+//   CHART TYPE SWITCHER
+// ============================================
+function setChartType(type, btn) {
+  chartType = type;
+
+  var iconMap = { line: '📈', candle: '🕯️', bar: '📊' };
+  var current = document.getElementById('chartTypeCurrent');
+  if (current) current.textContent = iconMap[type] || '🕯️';
+
+  ['optLine','optCandle','optBar'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.classList.remove('active');
+  });
+  var activeId = type === 'line' ? 'optLine' : type === 'bar' ? 'optBar' : 'optCandle';
+  var activeEl = document.getElementById(activeId);
+  if (activeEl) activeEl.classList.add('active');
+
+  lineSeries.applyOptions({    visible: type === 'line'   });
+  candleSeries.applyOptions({ visible: type === 'candle' });
+  barSeries.applyOptions({    visible: type === 'bar'    });
+
+  var menu = document.getElementById('chartTypeMenu');
+  if (menu) menu.classList.remove('open');
+}
+
+function toggleChartTypeMenu() {
+  var btn = document.getElementById('chartTypeBtn');
+  var menu = document.getElementById('chartTypeMenu');
+  var panel = document.querySelector('.chart-panel');
+  if (!menu || !btn) return;
+  var willOpen = !menu.classList.contains('open');
+  if (!willOpen) {
+    menu.classList.remove('open');
+    return;
+  }
+
+  if (menu.parentElement !== document.body) {
+    document.body.appendChild(menu);
+  }
+
+  var rect = btn.getBoundingClientRect();
+  var bounds = panel ? panel.getBoundingClientRect() : { left: 8, right: window.innerWidth - 8 };
+  var menuWidth = menu.offsetWidth || 170;
+  var minLeft = Math.max(8, bounds.left + 8);
+  var maxLeft = Math.max(minLeft, bounds.right - menuWidth - 8);
+  menu.style.left = Math.max(minLeft, Math.min(maxLeft, rect.left)) + 'px';
+  menu.style.top = (rect.bottom + 4) + 'px';
+  menu.classList.add('open');
+}
+
+// ============================================
+//   VOLUME TOGGLE
+// ============================================
+function toggleVolume() {
+  volumeVisible = !volumeVisible;
+  var el  = document.getElementById('volumeChart');
+  var btn = document.getElementById('volToggleBtn');
+  if (volumeVisible) {
+    volInstance.applyOptions({ height: 80 });
+    el.style.display = '';
+    btn.textContent  = 'הסתר';
+    btn.classList.add('active');
+  } else {
+    el.style.display = 'none';
+    btn.textContent  = 'הצג';
+    btn.classList.remove('active');
+  }
+}
+
+// ============================================
+//   KEYBOARD SHORTCUTS
+// ============================================
+document.addEventListener('keydown', function(e) {
+  if (e.altKey) {
+    var tfMap = { '1':'1H', '2':'4H', '3':'8H', '4':'1D', '5':'1W', '6':'1M', '7':'1Q', '8':'6M' };
+    if (tfMap[e.key]) { e.preventDefault(); setTimeframe(tfMap[e.key], null); return; }
+  }
+  if (e.key === 'Enter' && document.activeElement.id === 'searchInput')    searchStock();
+  if (e.key === 'Enter' && document.activeElement.id === 'watchlistInput') addToWatchlist();
+});
+
+// ============================================
+//   QUOTE & CARDS
+// ============================================
+async function fetchQuote(symbol) {
+  try {
+    var chartUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(symbol) + '?interval=1d&range=1mo';
+    var j = await fetchYahooProxyJson(chartUrl);
+    var result = j && j.chart && j.chart.result && j.chart.result[0];
+    var meta = result && result.meta;
+    var quote = result && result.indicators && result.indicators.quote && result.indicators.quote[0];
+    if (meta && quote && quote.close && quote.close.length) {
+      var lastClose = quote.close[quote.close.length - 1];
+      var previousClose = meta.previousClose || quote.close[Math.max(0, quote.close.length - 2)] || lastClose;
+      var change = lastClose - previousClose;
+      return {
+        price: lastClose,
+        change: change,
+        changePct: previousClose ? (change / previousClose) * 100 : 0,
+        name: (NAMES[symbol] || meta.symbol || symbol)
+      };
+    }
+  } catch(e) { /* fallback */ }
+  try {
+    var d = await tdFetch('/quote', { symbol: symbol });
+    if (d && d.close) {
+      var price  = parseFloat(d.close);
+      var open   = parseFloat(d.open);
+      var change2 = price - open;
+      return { price: price, change: change2, changePct: open ? (change2/open)*100 : 0, name: d.name || symbol };
+    }
+  } catch(e) { /* silent */ }
+  return null;
+}
+
+async function loadCard(symbol) {
+  var el = document.getElementById('card-' + symbol);
+  if (!el) {
+    var grid = document.getElementById('cardsGrid');
+    if (!grid) {
+      var dataOnly = await fetchQuote(symbol);
+      if (dataOnly) priceCache[symbol] = dataOnly;
+      return;
+    }
+    var div  = document.createElement('div');
+    div.className = 'stock-card skeleton';
+    div.id = 'card-' + symbol;
+    grid.appendChild(div);
+  }
+  var data = await fetchQuote(symbol);
+  if (!data) return;
+  priceCache[symbol] = data;
+  renderCard(symbol, data);
+}
+
+function renderCard(symbol, data) {
+  var el = document.getElementById('card-' + symbol);
+  if (!el) return;
+  el.classList.remove('skeleton');
+  el.onclick = function() { selectSymbol(symbol); };
+  var chgClass = data.change >= 0 ? 'up' : 'down';
+  var chgSign  = data.change >= 0 ? '+' : '';
+  var name     = NAMES[symbol] || data.name || symbol;
+  el.innerHTML =
+    '<div class="card-symbol">' + symbol + '</div>' +
+    '<div class="card-name">'   + name   + '</div>' +
+    '<div class="card-price">'  + formatPrice(data.price, symbol) + '</div>' +
+    '<div class="card-change '  + chgClass + '">' + chgSign + data.change.toFixed(2) + ' (' + chgSign + data.changePct.toFixed(2) + '%)</div>';
+  if (symbol === currentSymbol) el.classList.add('active');
+  else el.classList.remove('active');
+}
+
+// ============================================
+//   NEWS
+// ============================================
+async function fetchNews(symbol) {
+  try {
+    var url = 'https://query2.finance.yahoo.com/v1/finance/search?q=' +
+              encodeURIComponent(symbol) + '&newsCount=10&quotesCount=0';
+    var d = await yfFetch(url);
+    if (!d || !d.news) return [];
+    return d.news;
+  } catch(e) { return []; }
+}
+
+async function loadNews(symbol) {
+  // תעדכן את הסמל בכותרת ה-popup
+  var symEl = document.getElementById('newsSymbol');
+  if (symEl) symEl.textContent = symbol;
+  // סמן שיש חדשות
+  var btn = document.getElementById('newsFloatBtn');
+  var el  = document.getElementById('newsPopupList');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:1rem;color:var(--text-muted);font-size:.82rem">טוען חדשות...</div>';
+  var articles = await fetchNews(symbol);
+  if (!articles.length) {
+    el.innerHTML = '<div style="padding:1rem;color:var(--text-muted);font-size:.82rem">לא נמצאו חדשות. ' +
+      '<a href="https://finance.yahoo.com/quote/' + encodeURIComponent(symbol) + '/news" ' +
+      'target="_blank" rel="noopener" style="color:var(--accent)">פתח Yahoo Finance &#8599;</a></div>';
+    return;
+  }
+  if (btn) btn.classList.add('has-news');
+  el.innerHTML = articles.slice(0, 8).map(function(a) {
+    var date = a.providerPublishTime
+      ? new Date(a.providerPublishTime * 1000).toLocaleDateString('he-IL')
+      : '';
+    return '<div class="news-item">' +
+      '<a href="' + (a.link || '#') + '" target="_blank" rel="noopener">' + (a.title || '') + '</a>' +
+      '<div class="news-meta">' + (a.publisher || 'Yahoo Finance') + '&nbsp;&nbsp;' + date + '</div>' +
+      '</div>';
+  }).join('');
+}
+
+function toggleNewsPopup() {
+  var popup = document.getElementById('newsPopup');
+  var btn   = document.getElementById('newsFloatBtn');
+  if (!popup) return;
+  var isOpen = popup.classList.toggle('open');
+  if (btn) btn.style.borderColor = isOpen ? 'var(--accent)' : '';
+}
+
+function togglePortfolioPopup() {
+  var popup = document.getElementById('portfolioPopup');
+  var btn   = document.getElementById('portfolioFloatBtn');
+  if (!popup) return;
+  var isOpen = popup.classList.toggle('open');
+  if (btn) {
+    btn.style.borderColor = isOpen ? 'var(--gold)' : 'rgba(245,166,35,.45)';
+  }
+}
+
+function toggleAlertPopup() {
+  var popup = document.getElementById('alertPopup');
+  var btn   = document.getElementById('alertFloatBtn');
+  if (!popup) return;
+  var isOpen = popup.classList.toggle('open');
+  if (btn) {
+    btn.style.borderColor = isOpen ? 'var(--gold)' : 'rgba(245,166,35,.45)';
+  }
+}
+
+function toggleUserMenu() {
+  var dd = document.getElementById('userDropdown');
+  if (!dd) return;
+  dd.classList.toggle('open');
+}
+
+document.addEventListener('click', function(e) {
+  var userMenu = document.querySelector('.user-menu');
+  var userDd = document.getElementById('userDropdown');
+  if (userDd && userDd.classList.contains('open') && userMenu && !userMenu.contains(e.target)) {
+    userDd.classList.remove('open');
+  }
+
+  var chartTypeWrap = document.querySelector('.chart-type-wrap');
+  var chartTypeMenu = document.getElementById('chartTypeMenu');
+  if (chartTypeMenu && chartTypeMenu.classList.contains('open') && chartTypeWrap && !chartTypeWrap.contains(e.target) && !chartTypeMenu.contains(e.target)) {
+    chartTypeMenu.classList.remove('open');
+  }
+});
+// ============================================
+//   WATCHLIST
+// ============================================
+function renderWatchlist() {
+  var ul = document.getElementById('watchlist');
+  ul.innerHTML = watchlist.map(function(sym) {
+    var d = priceCache[sym];
+    var price = d ? formatPrice(d.price, sym) : '--';
+    var cls = d ? (d.change >= 0 ? 'up' : 'down') : '';
+    var pct = d ? (d.change >= 0 ? '+' : '') + d.changePct.toFixed(2) : '';
+    var name = (NAMES[sym] || (d && d.name) || sym).replace(/\s*\(.*?\)\s*/g, '').trim();
+    return '<li class="watch-item" onclick="selectSymbol(\'' + sym + '\')">'
+      + '<div class="watch-main">'
+      + '<span class="watch-name">' + name + '</span>'
+      + '<span class="watch-sym">' + sym + '</span>'
+      + '</div>'
+      + '<div class="watch-price-wrap">'
+      + '<span class="watch-price">' + price + '</span>'
+      + '<span class="watch-chg ' + cls + '">' + (d ? pct + '%' : '') + '</span>'
+      + '</div>'
+      + '<button class="watch-remove-btn" title="מחק מהרשימה" onclick="removeFromWatchlist(event, \'' + sym + '\')">🗑️</button>'
+      + '</li>';
+  }).join('');
+}
+
+async function addToWatchlist() {
+  var input = document.getElementById('watchlistInput');
+  var sym   = input.value.trim().toUpperCase();
+  if (!sym) { input.value = ''; return; }
+
+  var resolved = await resolveSymbolForData(sym, currentTF);
+  var finalSym = resolved || sym;
+  if (watchlist.includes(finalSym)) { input.value = ''; return; }
+
+  watchlist.push(finalSym);
+  localStorage.setItem('ml_watchlist', JSON.stringify(watchlist));
+  input.value = '';
+  await loadCard(finalSym);
+  renderWatchlist();
+}
+
+function removeFromWatchlist(e, sym) {
+  e.stopPropagation();
+  watchlist = watchlist.filter(function(s) { return s !== sym; });
+  localStorage.setItem('ml_watchlist', JSON.stringify(watchlist));
+  renderWatchlist();
+}
+
+// ============================================
+//   PORTFOLIO
+// ============================================
+function renderPortfolio() {
+  var ul = document.getElementById('portfolioList');
+  if (!portfolio.length) { ul.innerHTML = ''; document.getElementById('portfolioTotal').textContent = ''; return; }
+  var totalPnl = 0;
+  ul.innerHTML = portfolio.map(function(p, i) {
+    var current = (priceCache[p.symbol] && priceCache[p.symbol].price) || p.buyPrice;
+    var pnl     = (current - p.buyPrice) * p.shares;
+    var pnlPct  = ((current - p.buyPrice) / p.buyPrice) * 100;
+    totalPnl += pnl;
+    var cls  = pnl >= 0 ? 'up' : 'down';
+    var sign = pnl >= 0 ? '+' : '';
+    return '<li class="port-item">'
+      + '<div style="display:flex;justify-content:space-between">'
+      + '<span class="port-sym">' + p.symbol + '</span>'
+      + '<button class="remove-btn" onclick="removeFromPortfolio(' + i + ')"></button></div>'
+      + '<span class="port-detail">' + p.shares + ' מניות @ ' + formatPrice(p.buyPrice) + '</span>'
+      + '<span class="port-pnl ' + cls + '">' + sign + formatPrice(pnl) + ' (' + sign + pnlPct.toFixed(2) + '%)</span>'
+      + '</li>';
+  }).join('');
+  var col  = totalPnl >= 0 ? '#26a69a' : '#ef5350';
+  var sign = totalPnl >= 0 ? '+' : '';
+  document.getElementById('portfolioTotal').innerHTML = 'רווח/הפסד כולל: <span style="color:' + col + '">' + sign + formatPrice(totalPnl) + '</span>';
+}
+
+async function addToPortfolio() {
+  var sym    = document.getElementById('portSymbol').value.trim().toUpperCase();
+  var shares = parseFloat(document.getElementById('portShares').value);
+  var price  = parseFloat(document.getElementById('portPrice').value);
+  if (!sym || !shares || !price) return;
+  portfolio.push({ symbol: sym, shares: shares, buyPrice: price });
+  localStorage.setItem('ml_portfolio', JSON.stringify(portfolio));
+  document.getElementById('portSymbol').value = '';
+  document.getElementById('portShares').value = '';
+  document.getElementById('portPrice').value  = '';
+  await loadCard(sym);
+  renderPortfolio();
+}
+
+function removeFromPortfolio(i) {
+  portfolio.splice(i, 1);
+  localStorage.setItem('ml_portfolio', JSON.stringify(portfolio));
+  renderPortfolio();
+}
+
+// ============================================
+//   ALERTS
+// ============================================
+function renderAlerts() {
+  var ul = document.getElementById('alertsList');
+  if (!alerts.length) { ul.innerHTML = ''; return; }
+  ul.innerHTML = alerts.map(function(a, i) {
+    var triggered = checkAlert(a);
+    return '<li class="watch-item">'
+      + '<div><span class="watch-sym">' + a.symbol + '</span>'
+      + ' <span style="font-size:.72rem;color:var(--text-muted)">' + (a.condition === 'above' ? 'מעל' : 'מתחת') + ' ' + formatPrice(a.price) + '</span>'
+      + (triggered ? ' <span style="font-size:.68rem;background:rgba(245,166,35,.15);color:#f5a623;padding:.1rem .4rem;border-radius:4px;font-weight:700"> הופעל</span>' : '')
+      + '</div>'
+      + '<button class="remove-btn" onclick="removeAlert(' + i + ')"></button>'
+      + '</li>';
+  }).join('');
+}
+
+function addAlert() {
+  var sym   = document.getElementById('alertSymbol').value.trim().toUpperCase();
+  var cond  = document.getElementById('alertCondition').value;
+  var price = parseFloat(document.getElementById('alertPrice').value);
+  if (!sym || !price) return;
+  alerts.push({ symbol: sym, condition: cond, price: price });
+  localStorage.setItem('ml_alerts', JSON.stringify(alerts));
+  document.getElementById('alertSymbol').value = '';
+  document.getElementById('alertPrice').value  = '';
+  renderAlerts();
+}
+
+function removeAlert(i) {
+  alerts.splice(i, 1);
+  localStorage.setItem('ml_alerts', JSON.stringify(alerts));
+  renderAlerts();
+}
+
+function checkAlert(a) {
+  var current = priceCache[a.symbol] && priceCache[a.symbol].price;
+  if (!current) return false;
+  return (a.condition === 'above' && current > a.price) || (a.condition === 'below' && current < a.price);
+}
+
+// ============================================
+//   SEARCH & SELECT
+// ============================================
+async function searchStock() {
+  var sym = document.getElementById('searchInput').value.trim().toUpperCase();
+  if (!sym) return;
+  document.getElementById('searchInput').value = '';
+  var resolved = await resolveSymbolForData(sym, currentTF);
+  if (!resolved) {
+    document.getElementById('chartTitle').textContent = sym;
+    document.getElementById('chartSubtitle').textContent = 'לא נמצאו נתוני גרף עבור הסימבול. נסה סימבול אחר או פורמט .TA';
+    return;
+  }
+  await selectSymbol(resolved);
+}
+
+async function selectSymbol(symbol) {
+  var resolved = await resolveSymbolForData(symbol, currentTF);
+  if (!resolved) {
+    document.getElementById('chartTitle').textContent = symbol;
+    document.getElementById('chartSubtitle').textContent = 'לא נמצאו נתונים ב-Yahoo Finance. נסה פורמט XXXX.TA למניות תא';
+    return;
+  }
+
+  currentSymbol = resolved;
+  await loadChart(resolved, currentTF);
+  await loadNews(resolved);
+  if (!priceCache[resolved]) await loadCard(resolved);
+  renderWatchlist();
+  renderPortfolio();
+  renderAlerts();
+}
+
+// ============================================
+//   TICKER
+// ============================================
+async function buildTicker() {
+  var all   = Array.from(new Set(DEFAULT_SYMBOLS.concat(watchlist)));
+  var parts = await Promise.all(all.map(async function(sym) {
+    var d = priceCache[sym] || await fetchQuote(sym);
+    if (!d) return sym + ': N/A';
+    var sign = d.change >= 0 ? '' : '';
+    var col  = d.change >= 0 ? 'up' : 'down';
+    return '<span>' + sym + ': ' + formatPrice(d.price) + ' </span><span class="' + col + '">' + sign + ' ' + Math.abs(d.changePct).toFixed(2) + '%</span>';
+  }));
+  var text = parts.join('<span style="color:var(--border)">    </span>');
+  document.getElementById('tickerInner').innerHTML = text + '<span style="color:var(--border)">    </span>' + text;
+}
+
+async function refreshPrices() {
+  var all = Array.from(new Set(DEFAULT_SYMBOLS.concat(watchlist).concat(portfolio.map(function(p) { return p.symbol; }))));
+  await Promise.all(all.map(async function(sym) {
+    var d = await fetchQuote(sym);
+    if (d) { priceCache[sym] = d; renderCard(sym, d); }
+  }));
+  renderWatchlist();
+  renderPortfolio();
+  renderAlerts();
+  buildTicker();
+  updateTASEBadge();
+}
+
+// ============================================
+//   FORMATTERS
+// ============================================
+function formatPrice(p, sym) {
+  if (p === null || p === undefined || isNaN(p)) return '';
+  var s    = (sym || currentSymbol || '').toUpperCase();
+  var curr = s.endsWith('.TA') ? '\u20AA' : '$';
+  if (p >= 1000) return curr + p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (p >= 1)    return curr + p.toFixed(2);
+  return curr + p.toFixed(4);
+}
+
+function formatVolume(v) {
+  if (!v || isNaN(v)) return '';
+  if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+  if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
+  if (v >= 1e3) return (v / 1e3).toFixed(1) + 'K';
+  return v.toString();
+}
+
+// ============================================
+//   INIT
+// ============================================
+async function init() {
+  try {
+    console.log('[NexTrade] init() starting...');
+    initChart();
+    console.log('[NexTrade] Chart initialized.');
+    
+    updateTASEBadge();
+    setInterval(updateTASEBadge, 60000);
+    
+    renderWatchlist();
+    renderPortfolio();
+    renderAlerts();
+    
+    console.log('[NexTrade] Loading cards for symbols:', DEFAULT_SYMBOLS);
+    await Promise.all(DEFAULT_SYMBOLS.map(function(s) { return loadCard(s); }));
+    console.log('[NexTrade] Cards loaded.');
+    
+    console.log('[NexTrade] Loading chart for:', currentSymbol, currentTF);
+    var resolvedInitial = await resolveSymbolForData(currentSymbol, currentTF);
+    if (resolvedInitial) {
+      currentSymbol = resolvedInitial;
+    } else if (watchlist.length) {
+      for (var i = 0; i < watchlist.length; i++) {
+        var candidate = await resolveSymbolForData(watchlist[i], currentTF);
+        if (candidate) {
+          currentSymbol = candidate;
+          break;
+        }
+      }
+    }
+    await loadChart(currentSymbol, currentTF);
+    console.log('[NexTrade] Chart loaded.');
+    
+    await loadNews(currentSymbol);
+    buildTicker();
+    setInterval(refreshPrices, 60000);
+    setInterval(function() {
+      // force fresh bars for the active chart
+      delete candleCache[currentSymbol + '_' + currentTF];
+      delete candleCache['yf_' + currentSymbol + '_' + currentTF];
+      loadChart(currentSymbol, currentTF);
+    }, 15000);
+    
+    console.log('[NexTrade] ✅ init() completed successfully!');
+  } catch(e) {
+    console.error('[NexTrade] ❌ init() failed:', e.message || e, e.stack);
+  }
+}

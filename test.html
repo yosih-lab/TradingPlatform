@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>NexTrade - Test</title>
+</head>
+<body style="background:#0b0e17; color:#d1d4dc; font-family:Heebo,sans-serif; padding:20px;">
+  <h1>🔍 NexTrade - Debug Test</h1>
+  
+  <div id="status" style="background:#131722; padding:15px; border-radius:8px; margin:10px 0; font-family:monospace; font-size:12px;">
+    <p><strong>בדיקת טעינה:</strong></p>
+    <ul style="margin:10px 0; padding-left:20px;">
+      <li>✅ HTML טוען</li>
+      <li id="js-status">⏳ JS טוען...</li>
+      <li id="lc-status">⏳ LightweightCharts טוען...</li>
+      <li id="init-status">⏳ Init טוען...</li>
+    </ul>
+  </div>
+  
+  <button onclick="clearAndReload()" style="background:#2962ff; color:#fff; border:none; padding:10px 20px; border-radius:5px; cursor:pointer; font-family:Heebo,sans-serif;">
+    🔄 נקה Cache וטען מחדש
+  </button>
+  
+  <script>
+    console.log('[Test] HTML page loaded');
+    document.getElementById('js-status').textContent = '✅ JS יוצר (test.html)';
+    
+    setTimeout(function() {
+      if (typeof LightweightCharts !== 'undefined') {
+        document.getElementById('lc-status').textContent = '✅ LightweightCharts טוען';
+      } else {
+        document.getElementById('lc-status').textContent = '❌ LightweightCharts לא טוען';
+      }
+    }, 500);
+    
+    setTimeout(function() {
+      var el = document.getElementById('appContainer');
+      if (el) {
+        document.getElementById('init-status').textContent = '✅ appContainer קיים';
+      } else {
+        document.getElementById('init-status').textContent = '❌ appContainer לא קיים';
+      }
+    }, 1000);
+    
+    function clearAndReload() {
+      localStorage.clear();
+      alert('Cache נוקה. טוען מחדש...');
+      location.href = 'index.html';
+    }
+  </script>
+  
+  <p style="margin-top:20px; color:#6b7280; font-size:12px;">
+    💡 <strong>הנחיה:</strong> אם אתה רואה מסך לבן ב-index.html, לחץ על הכפתור להלן כדי לנקות את ה-cache:
+  </p>
+  <button onclick="clearAndReload()" style="background:#f5a623; color:#000; border:none; padding:8px 16px; border-radius:5px; cursor:pointer; font-family:Heebo,sans-serif; font-weight:bold; margin-top:10px;">
+    🧹 נקה Cache + טען index.html
+  </button>
+</body>
+</html>
