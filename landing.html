@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NexTrade</title>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700;900&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#0B1F3A;--navy2:#0D2347;--card:#102040;--line:#1E3A5F;--teal:#00B4D8;--orange:#F97316;--white:#FFFFFF;--offwhite:#DCE8F5;--light:#8BAFD0;--muted:#4A6A88}
+*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Heebo',sans-serif;background:var(--navy);color:var(--white);direction:rtl;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background:linear-gradient(160deg,rgba(11,31,58,0.82) 0%,rgba(8,18,35,0.75) 50%,rgba(5,12,26,0.88) 100%);z-index:1}
+body::after{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,180,216,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,180,216,.025) 1px,transparent 1px);background-size:40px 40px;z-index:2}
+.bg-img-wrap{position:fixed;inset:0;z-index:0;overflow:hidden}.bg-img{width:100%;height:100%;object-fit:cover;object-position:center 55%;filter:brightness(0.62) saturate(1.15) contrast(1.08)}
+.top-bar{height:3px;background:var(--teal)}
+nav{display:flex;justify-content:space-between;align-items:center;padding:20px 48px;background:rgba(10,20,40,.6);backdrop-filter:blur(12px);border-bottom:1px solid rgba(30,58,95,.5);position:sticky;top:0;z-index:100}
+.logo{font-size:22px;font-weight:900}
+.nex{color:var(--teal)}.trade{color:var(--orange)}
+.nav-tag{font-size:11px;color:var(--muted);letter-spacing:1px}
+.hero{text-align:center;padding:72px 48px 48px;max-width:720px;margin:0 auto}
+.badge{display:inline-block;background:rgba(0,180,216,.12);border:1px solid rgba(0,180,216,.3);color:var(--teal);font-size:11px;font-weight:700;letter-spacing:2px;padding:6px 18px;border-radius:20px;margin-bottom:28px}
+.hero h1{font-size:clamp(38px,6vw,60px);font-weight:900;line-height:1.15;margin-bottom:10px}
+.line1{color:var(--white);display:block}.line2{color:var(--teal);display:block}
+.three-lines{margin:28px auto 0;max-width:520px}
+.line-item{display:flex;align-items:flex-start;gap:12px;margin-bottom:14px}
+.line-dot{width:8px;height:8px;background:var(--teal);border-radius:50%;flex-shrink:0;margin-top:7px}
+.line-item span{font-size:16px;font-weight:300;color:var(--offwhite);line-height:1.6}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:560px;margin:48px auto 0;padding:0 48px}
+.stat-card{background:var(--card);border:1px solid var(--line);border-top:3px solid var(--teal);border-radius:14px;padding:28px 20px;text-align:center;transition:transform .2s,box-shadow .2s}
+.stat-card:hover{transform:translateY(-4px);box-shadow:0 10px 30px rgba(0,180,216,.15)}
+.stat-num{font-size:26px;font-weight:900;color:var(--white);margin-bottom:6px}
+.stat-sub{font-size:13px;font-weight:300;color:var(--light)}
+.divider{height:1px;background:linear-gradient(90deg,transparent,var(--line),transparent);margin:52px 48px}
+.form-wrap{max-width:560px;margin:0 auto;padding:0 48px 20px}
+.form-label{font-size:11px;font-weight:700;letter-spacing:2px;color:var(--teal);text-align:center;margin-bottom:10px}
+.form-title{font-size:clamp(22px,3.5vw,30px);font-weight:800;color:var(--white);text-align:center;margin-bottom:8px}
+.form-sub{font-size:14px;font-weight:300;color:var(--light);text-align:center;margin-bottom:32px;line-height:1.7}
+.form-card{background:var(--card);border:1px solid var(--line);border-top:3px solid var(--teal);border-radius:20px;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.form-group{margin-bottom:16px}
+label{display:block;font-size:12px;font-weight:600;color:var(--light);margin-bottom:6px}
+input,select{width:100%;background:rgba(11,31,58,.8);border:1px solid var(--line);border-radius:10px;padding:14px 16px;font-size:14px;font-family:'Heebo',sans-serif;color:var(--white);direction:rtl;outline:none;transition:border-color .2s,box-shadow .2s}
+input::placeholder{color:var(--muted)}
+input:focus,select:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(0,180,216,.1)}
+select option{background:var(--navy2)}
+.submit-btn{width:100%;background:var(--teal);color:var(--navy);border:none;border-radius:12px;padding:18px;font-size:16px;font-weight:800;font-family:'Heebo',sans-serif;cursor:pointer;margin-top:8px;transition:background .2s,transform .15s,box-shadow .2s}
+.submit-btn:hover{background:#00C8EE;transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,180,216,.3)}
+.form-note{text-align:center;font-size:11px;color:var(--muted);margin-top:16px;line-height:1.6}
+.success-msg{display:none;text-align:center;padding:32px}
+.success-msg .icon{font-size:48px;margin-bottom:16px}
+.success-msg h3{font-size:22px;font-weight:800;color:var(--teal);margin-bottom:8px}
+.success-msg p{font-size:14px;color:var(--light);line-height:1.7}
+.trust-tags{display:flex;justify-content:center;gap:24px;flex-wrap:wrap;margin:40px 0 60px;padding:0 48px}
+.trust-tag{font-size:12px;color:var(--light);display:flex;align-items:center;gap:6px}
+.trust-tag::before{content:'◆';color:var(--teal);font-size:8px}
+footer{border-top:1px solid var(--line);padding:24px 48px;text-align:center}
+.footer-logo{font-size:16px;font-weight:900;margin-bottom:8px}
+.footer-disclaimer{font-size:11px;color:var(--muted);max-width:600px;margin:0 auto;line-height:1.6}
+.reveal{opacity:0;transform:translateY(20px);transition:opacity .6s ease,transform .6s ease}
+.reveal.visible{opacity:1;transform:translateY(0)}
+@media(max-width:600px){nav{padding:16px 20px}.hero{padding:48px 24px 36px}.stats-grid{padding:0 24px;gap:10px}.divider{margin:40px 24px}.form-wrap{padding:0 20px 20px}.form-card{padding:28px 20px}.trust-tags{gap:14px;padding:0 20px}}
+</style>
+</head>
+<body>
+<div class="bg-img-wrap"><img class="bg-img" src="bg-hero.jpeg" alt=""></div>
+<div style="position:relative;z-index:3">
+<div class="top-bar"></div>
+<nav>
+  <div class="logo"><span class="nex">Nex</span><span class="trade">Trade</span></div>
+  <div class="nav-tag">גישה מוקדמת — מקומות מוגבלים</div>
+</nav>
+<div class="hero">
+  <div class="badge">🚀 &nbsp; גישה מוקדמת בלעדית</div>
+  <h1><span class="line1">תפסיק לנחש.</span><span class="line2">תתחיל לדעת.</span></h1>
+  <div class="three-lines">
+    <div class="line-item"><div class="line-dot"></div><span>כל בוקר מייל עם המניות הכי מעניינות בבורסה בת"א</span></div>
+    <div class="line-item"><div class="line-dot"></div><span>פשוט למה כל מניה נבחרה - בלי ניחושים, בלי עבודה</span></div>
+    <div class="line-item"><div class="line-dot"></div><span>סטופ לוס, יעד מחיר וגודל פוזיציה — הכל מוכן עבורך</span></div>
+  </div>
+</div>
+<div class="stats-grid reveal">
+  <div class="stat-card"><div class="stat-num">480+</div><div class="stat-sub">מניות נסרקות כל יום</div></div>
+  <div class="stat-card"><div class="stat-num">8+</div><div class="stat-sub">קריטריונים לכל מניה</div></div>
+  <div class="stat-card"><div class="stat-num">פחות מ-5</div><div class="stat-sub">התראות ביום</div></div>
+  <div class="stat-card"><div class="stat-num">הסבר מלא</div><div class="stat-sub">בשפה פשוטה</div></div>
+</div>
+<div class="divider"></div>
+<div class="form-wrap">
+  <div class="form-label">גישה מוקדמת</div>
+  <div class="form-title">אני מחפש 20 משקיעים ראשונים</div>
+  <div class="form-sub">השאר פרטים ואחזור אליך אישית תוך 24 שעות</div>
+  <div class="form-card reveal">
+    <form id="leadForm">
+      <div class="form-group"><label>שם מלא *</label><input type="text" name="name" placeholder="ישראל ישראלי" required></div>
+      <div class="form-group"><label>מייל *</label><input type="email" name="email" placeholder="your@email.com" required></div>
+      <div class="form-group"><label>טלפון *</label><input type="tel" name="phone" placeholder="05X-XXXXXXX" required></div>
+      <div class="form-group">
+        <label>כמה זמן אתה משקיע בשוק ההון?</label>
+        <select name="experience"><option value="" disabled selected>בחר...</option><option>פחות משנה</option><option>1–3 שנים</option><option>יותר מ-3 שנים</option><option>עדיין לא משקיע אבל רוצה להתחיל</option></select>
+      </div>
+      <button type="submit" class="submit-btn">אני רוצה לשמוע עוד ←</button>
+      <div class="form-note">ללא התחייבות &nbsp;•&nbsp; ₪49 לחודש &nbsp;•&nbsp; שבוע ראשון חינם<br>הפרטים שלך נשמרים בסודיות מלאה</div>
+    </form>
+    <div class="success-msg" id="successMsg">
+      <div class="icon">✅</div>
+      <h3>קיבלנו! תודה רבה</h3>
+      <p>אחזור אליך אישית תוך 24 שעות.<br>בינתיים — תשמור על סבלנות 😊</p>
+    </div>
+  </div>
+</div>
+<div class="trust-tags reveal">
+  <div class="trust-tag">נתוני בורסה אמיתיים</div>
+  <div class="trust-tag">ללא עמלות נסתרות</div>
+  <div class="trust-tag">ביטול בכל עת</div>
+  <div class="trust-tag">תמיכה בעברית</div>
+  <div class="trust-tag">פרטיות מלאה</div>
+</div>
+<footer>
+  <div class="footer-logo"><span class="nex">Nex</span><span class="trade">Trade</span></div>
+  <div class="footer-disclaimer">NexTrade אינו מספק ייעוץ השקעות מורשה. האיתותים הם למטרות מידע בלבד. השקעה בשוק ההון כרוכה בסיכון.</div>
+</footer>
+<script>
+const reveals=document.querySelectorAll('.reveal');
+new IntersectionObserver((entries)=>{entries.forEach((e,i)=>{if(e.isIntersecting)setTimeout(()=>e.target.classList.add('visible'),i*80)});},{threshold:.1}).observe && reveals.forEach(el=>new IntersectionObserver((entries)=>{entries.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible')});},{threshold:.1}).observe(el));
+document.getElementById('leadForm').addEventListener('submit',function(e){
+  e.preventDefault();
+  fetch('https://formspree.io/f/xzdylyjn',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({name:this.name.value,email:this.email.value,phone:this.phone.value,experience:this.experience.value})})
+  .finally(()=>{document.getElementById('leadForm').style.display='none';document.getElementById('successMsg').style.display='block'});
+});
+</script>
+</div><!-- /z-index wrapper -->
+</body>
+</html>
